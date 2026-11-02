@@ -1,0 +1,391 @@
+/* Jarvis запускается из этой папки */
+data/
+logs/
+models/
+vendor/
+.tmp-tests/
+__pycache__/
+*.pyc
+*.log
+settings.local.json
+
+MIT License
+
+Copyright (c) 2026 Jarvis contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+Проект является самостоятельной реализацией и не содержит кода из
+riwvv/Jarvis (проприетарная лицензия). Функциональная постановка задачи
+вдохновлена этим проектом.
+
+# Jarvis — локальный голосовой ИИ-агент для Windows
+
+Полностью локальный голосовой ассистент: распознаёт русскую речь офлайн (Vosk),
+озвучивает ответы (SAPI), управляет файлами, программами, громкостью, музыкой,
+погодой и напоминаниями. Работает без интернета; языковая модель (Ollama или
+любой OpenAI-совместимый сервер) подключается по желанию.
+
+Реализация написана с нуля на Python: ни одна строка не скопирована из
+[riwvv/Jarvis](https://github.com/riwvv/Jarvis) — там проприетарная лицензия,
+поэтому проект воспроизводит **функциональность**, а не код. Смотрите
+[«Отличия от оригинала»](#отличия-от-оригинала).
+
+![HUD Jarvis](screenshot.png)
+
+---
+
+## Быстрый старт
+
+```bat
+cd Jarvis
+python tools\bootstrap.py          :: скачает vosk, sounddevice и русскую модель (~45 МБ)
+start_jarvis.cmd                   :: запуск HUD + голос
+```
+
+Если PowerShell блокирует скрипты — просто `python -m jarvis`.
+
+Требования: Windows 10/11, Python 3.10+ (проверено на 3.15), микрофон.
+Интернет нужен только для установки зависимостей и для погоды.
+
+### Режимы запуска
+
+| Команда | Что делает |
+|---|---|
+| `Jarvis.bat` (на рабочем столе) | HUD + голос, без консольного окна |
+| `Jarvis.bat check` | диагностика из командной строки |
+| `start_jarvis.cmd` | то же из папки проекта |
+| `python -m jarvis` | HUD-интерфейс + голосовой ввод |
+| `python -m jarvis --text` | текстовый диалог в консоли |
+| `python -m jarvis --eval "открой ютуб"` | выполнить одну фразу и выйти |
+| `python -m jarvis --check` | диагностика: модель, голоса, микрофон, LLM |
+| `python -m jarvis --actions` | список всех действий |
+| `python -m jarvis --no-voice` | HUD без микрофона |
+| `python -m jarvis --debug` | подробный лог |
+
+---
+
+## Что умеет
+
+### Файлы (загрузки, документы, картинки, видео, музыка, рабочий стол)
+
+| Фраза | Действие |
+|---|---|
+| «Проанализируй папку загрузки» | количество файлов, папок, общий размер |
+| «Создай текстовик заметка на рабочем столе» | новый `.txt` (содержимое — из буфера) |
+| «Открой файл отчёт.docx из документов» | запуск в программе по умолчанию |
+| «Перемести все фотки из загрузок на рабочий стол» | сортировка по типу |
+| «Переименуй файл старый отчёт в новый отчёт в документах» | переименование |
+| «Удали файл тест.docx с рабочего стола» | в корзину, с подтверждением |
+| «Верни всё как было» | отмена последней операции |
+| «Найди файл договор» | нечёткий поиск по всем папкам |
+
+Поиск нечёткий (расстояние Левенштейна): «видос попытка» найдёт `попытка.mp4`.
+Все операции ограничены папками пользователя — выйти за их пределы нельзя.
+
+### Программы и интернет
+
+| Фраза | Действие |
+|---|---|
+| «Открой Steam», «Запусти калькулятор» | поиск ярлыка в меню «Пуск» + запуск |
+| «Открой YouTube», «Открой сайт ВКонтакте» | сайт в браузере (40+ алиасов) |
+| «Загугли рецепт блинов» | поиск в Google / Яндекс / YouTube |
+
+### Система и медиа
+
+| Фраза | Действие |
+|---|---|
+| «Сделай громкость 50%» | CoreAudio, без задержек |
+| «Громче» / «Тише» / «Выключи звук» | клавиши громкости |
+| «Сверни все окна» | рабочий стол (Win+D) |
+| «Открой диспетчер задач» | taskmgr |
+| «Выключи компьютер» / «Отмени выключение» | `shutdown /s /t 5` и `/a` |
+| «Заблокируй компьютер» | Win+L |
+| «Включи музыку», «Поставь на паузу», «Следующий трек» | медиа-клавиши |
+| «Что играет?» | трек из заголовка окна плеера |
+
+### Погода, напоминания, память
+
+| Фраза | Действие |
+|---|---|
+| «Какая погода в Москве?» | Open-Meteo, без API-ключа |
+| «Какая погода завтра?» | автоопределение города по IP |
+| «Напомни через 10 минут выключить чайник» | таймер + озвучка |
+| «Покажи напоминания» / «Отмени напоминание» | управление списком |
+| «Запомни, что меня зовут Алексей» | долговременная память (RAG) |
+| «Как меня зовут?», «Что ты помнишь обо мне» | поиск по смыслу |
+| «Забудь про рыбалку», «Очисти память» | удаление фактов |
+
+### Мелочи
+
+«Брось кубик», «Брось монетку», «Случайное число до 50», «Камень ножницы
+бумага», «Что в буфере?», «Создай файл из буфера обмена», «Который час».
+
+---
+
+## Голос
+
+1. Скажите **«Джарвис»** — ассистент ответит и начнёт слушать команду.
+2. Скажите команду. Тишина 0,5 с завершает фразу.
+3. Если микрофон надоел — нажмите на кольцо или кнопку «Микрофон».
+
+Горячая клавиша `Ctrl+Alt+J` сворачивает и разворачивает HUD.
+Пока Jarvis говорит, микрофон автоматически глушится (нет эха).
+
+Модели распознавания (`models/`):
+
+| Модель | Размер | Когда использовать |
+|---|---|---|
+| `vosk-model-small-ru-0.22` | 45 МБ | по умолчанию, быстрая |
+| `vosk-model-ru-0.42` | 1.8 ГБ | максимальная точность |
+
+Установка большой модели: `python tools\bootstrap.py --model big`.
+
+---
+
+## Языковая модель (необязательно)
+
+Быстрые команды работают **без** LLM. LLM нужна для свободных вопросов и
+понимания сложных формулировок.
+
+```bat
+ollama pull qwen2.5:7b-instruct
+ollama pull all-minilm:l6-v2
+```
+
+`settings.json`:
+
+```json
+{
+  "llm": {
+    "provider": "ollama",
+    "base_url": "http://127.0.0.1:11434",
+    "model": "qwen2.5:7b-instruct",
+    "embed_model": "all-minilm:l6-v2"
+  }
+}
+```
+
+Поддерживается любой OpenAI-совместимый сервер (LM Studio, llama.cpp, vLLM):
+`"provider": "openai"`, `"base_url": "http://127.0.0.1:1234"`.
+Если сервер недоступен, Jarvis молча переключается на офлайн-режим.
+
+---
+
+## Архитектура
+
+```
+jarvis/
+├── cli.py              точка входа, режимы запуска, диагностика
+├── config.py           настройки + значения по умолчанию
+├── core/
+│   ├── engine.py       конвейер: фраза → действие → ответ → озвучка
+│   ├── router.py       быстрые regex-правила (десятки микросекунд)
+│   ├── actions.py      реестр действий (общий для роутера и LLM)
+│   ├── lang.py         нормализация, Левенштейн, числа, парсинг времени
+│   ├── llm.py          Ollama / OpenAI-совместимый клиент, JSON-решатель
+│   ├── memory.py       RAG: эмбеддинги Ollama или офлайн hashing
+│   ├── reminders.py    планировщик напоминаний (поток)
+│   └── state.py        журнал операций, напоминания, кэш приложений
+├── plugins/            files, apps, browser, media, system, weather,
+│                       reminders, memory, clipboard, games
+├── voice/
+│   ├── stt.py          Vosk: wake-word грамматика + распознавание команды
+│   └── tts.py          SAPI через долгоживущий PowerShell
+└── ui/hud.py           неоновый HUD на Tkinter (canvas, анимация, очередь событий)
+```
+
+Порядок обработки фразы:
+
+1. **Нормализация** — нижний регистр, ё→е, пунктуация, но имена файлов и
+   время (`15:30`) сохраняются.
+2. **Быстрый маршрут** — regex-правила по приоритетам. ~0,2 мс, без сети.
+3. **LLM** — только если быстрый маршрут не сработал: модель получает каталог
+   действий и возвращает JSON `{"action": ..., "args": ...}` либо ответ.
+4. **Память** — успешный диалог сохраняется в векторную базу, поиск по смыслу.
+5. **Озвучка** — ответ уходит в SAPI и в HUD.
+
+Подтверждения реализованы состоянием: «удали файл …» → «Удалить …? да/нет» →
+следующая фраза «да» выполняет отложенное действие.
+
+---
+
+## Данные и приватность
+
+Всё лежит в `data/` рядом с программой:
+
+| Файл | Что внутри |
+|---|---|
+| `data/kb.json` | векторная память (факты, диалоги) |
+| `data/state.json` | журнал отмены, напоминания, кэш ярлыков |
+| `data/trash/` | резервные копии удалённых файлов (для «верни как было») |
+| `logs/jarvis-logs.txt` | логи с ротацией |
+
+Удалите `data/kb.json`, чтобы обнулить память. В облако не уходит ничего:
+распознавание и синтез — локальные, LLM — локальный сервер.
+
+---
+
+## Тесты
+
+```bat
+python -m unittest discover -s tests -v
+```
+
+34 теста: нормализация и нечёткий поиск, 40+ фраз маршрутизатора, файловые
+операции на временном профиле (создание, переименование, перемещение, удаление
+с подтверждением, отмена), RAG-память, планировщик напоминаний, разбор JSON
+от LLM.
+
+---
+
+## Устранение неполадок
+
+| Симптом | Решение |
+|---|---|
+| «Микрофон не запущен: нет модели» | `python tools\bootstrap.py` |
+| Модель не качается | bootstrap сам перебирает зеркала (alphacephei → Hugging Face → GitHub). Можно скачать вручную и распаковать в `models/` |
+| Микрофон не слышит | `python -m jarvis --check`, проверить устройство по умолчанию |
+| Нет звука | SAPI выводит на устройство по умолчанию. Если это HDMI-выход без колонок — переключите вывод в Windows. Проверка: `python tools\voice_selftest.py` |
+| Ollama не отвечает | Запустить Ollama, проверить `ollama list` |
+| Погода не работает | Нужен интернет; задать город в `settings.json` → `weather.default_city` |
+| Логи | `logs/jarvis-logs.txt` |
+
+Проверка голосового тракта без микрофона:
+
+```bat
+python tools\voice_selftest.py "джарвис открой ютуб"   :: синтез в WAV + распознавание
+python tools\voice_selftest.py --recognize my.wav      :: распознать готовый файл
+```
+
+---
+
+## Отличия от оригинала
+
+Оригинальный [riwvv/Jarvis](https://github.com/riwvv/Jarvis) — C#/WPF,
+Semantic Kernel, проприетарная лицензия. Здесь:
+
+* **Python вместо C#** — запускается без .NET SDK, проще править.
+* **Свой реестр действий** вместо Semantic Kernel: одинаковый каталог для
+  быстрых правил и LLM.
+* **RAG с офлайн-фолбэком** (hashing-эмбеддинги), а не только Ollama.
+* **Отмена файловых операций** через журнал + жёсткие ссылки в резерв.
+* **Громкость через CoreAudio** напрямую (ctypes), без внешних утилит.
+
+---
+
+## Лицензия
+
+MIT. Проект не содержит кода из проприетарного `riwvv/Jarvis`.
+
+# Jarvis не использует pip во время работы: зависимости лежат в vendor/.
+# Скрипт tools/bootstrap.py сам скачивает нужные колёса с PyPI:
+#   vosk, sounddevice, cffi, pycparser, srt, requests, urllib3,
+#   certifi, charset-normalizer, idna, tqdm
+#
+# Этот файл нужен только для справки или если вы ставите зависимости вручную:
+#   python -m pip install vosk sounddevice
+vosk>=0.3.45
+sounddevice>=0.4.6
+
+{
+  "llm": {
+    "provider": "ollama",
+    "base_url": "http://127.0.0.1:11434",
+    "model": "qwen2.5:7b-instruct",
+    "embed_model": "all-minilm:l6-v2",
+    "timeout": 45,
+    "temperature": 0.4
+  },
+  "voice": {
+    "enabled": true,
+    "wake_word": "джарвис",
+    "wake_required": true,
+    "model": "",
+    "tts_voice": "",
+    "tts_rate": 0,
+    "hotkey": "ctrl+alt+j",
+    "energy_threshold": 0.012,
+    "listen_timeout": 7.0,
+    "phrase_limit": 14.0
+  },
+  "ui": {
+    "theme": "cyan",
+    "always_on_top": true,
+    "width": 620,
+    "height": 760
+  },
+  "weather": {
+    "default_city": "Москва",
+    "units": "celsius"
+  },
+  "safety": {
+    "confirm_delete": true,
+    "confirm_shutdown": true,
+    "allow_power_actions": true
+  }
+}
+
+@echo off
+title Jarvis
+setlocal EnableExtensions
+cd /d "%~dp0"
+
+rem ASCII only: cmd reads .bat in the OEM code page, Russian text breaks parsing.
+rem All Russian messages are printed by Python.
+
+where python >nul 2>nul
+if errorlevel 1 (
+  echo [Jarvis] Python is not in PATH.
+  echo Install Python 3.10+ and check "Add python.exe to PATH".
+  pause
+  exit /b 1
+)
+
+if not exist "vendor\vosk" (
+  python tools\bootstrap.py
+  if errorlevel 1 (
+    echo [Jarvis] Dependency setup failed.
+    pause
+    exit /b 1
+  )
+)
+
+if /i "%~1"=="check" goto console
+if /i "%~1"=="text" goto console
+
+where pythonw >nul 2>nul
+if errorlevel 1 goto console_minimized
+start "" pythonw -m jarvis
+exit /b 0
+
+:console_minimized
+start "" /min python -m jarvis
+exit /b 0
+
+:console
+set "ARGS=%*"
+if /i "%~1"=="check" set "ARGS=--check"
+if /i "%~1"=="text"  set "ARGS=--text"
+python -m jarvis %ARGS%
+set "RC=%ERRORLEVEL%"
+if not "%RC%"=="0" pause
+exit /b %RC%
